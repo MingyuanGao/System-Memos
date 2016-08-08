@@ -1,0 +1,124 @@
+               How to Add a Custom Linux Kernel to an Ubuntu VM 
+Abstract
+========
+  This guide documents how to add a custom Linux kernel to an Ubuntu Virtual 
+Machine, such as an Ubuntu Cloud Image. In particular, we will first 1) copy the
+custom Linux kernel into the VM Image, then 2) generate a Ramdisk for this custom
+kernel, and finally 3) update the GRUB configuration file.
+
+Contents
+========
+  1. Mount Your VM Image
+  2. Build the Custom Kernel
+  3. Generate a Ramdisk for the Custom Kernel
+  4. Update GRUB Configuration File
+
+NOTE
+====
+  1. This guide has been tested on Ubuntu 16.04_x86-64.
+  2. Paths without a prefix have a default prefix of project top directory. 
+=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+1. Mount Your VM Image
+======================
+We assume the file name of the Ubuntu VM Image is "ubuntu.img"
+
+# Check the VM Image format
+$ file ubuntu.img
+
+# IF it is raw, it is more convenient to access it this way ...
+$ sudo apt-get install kpartx
+$ sudo losetup /dev/loop0 ubuntu.img
+$ sudo kpartx -a ubuntu.img 
+# Mount the appropriate partition, using the first partition as an example
+$ mkdir guest_rootfs 
+$ sudo mount /dev/mapper/loop0p1 guest_rootfs
+
+# IF it is qcow2, qed, vdi, vmdk or vpc, use guestmount to access it ...
+$ sudo apt-get install libguestfs-tools
+# Find out the file systems inside the image that need to be updated, such
+# as /dev/sda1, dev/sda2
+$ sudo guestfish -a ubuntu.img
+><fs> run 
+><fs> list-filesystems
+><fs> exit 
+# Mount the appropriate partition, using the first partition as an example
+$ mkdir guest_rootfs
+$ sudo guestmount -a ubuntu.img -m /dev/sda1 guest_rootfs
+
+
+2. Build the Custom Kernel
+==========================
+# Download Linux kernel source code, using Ubuntu 4.4.0-31-generic as an example 
+$ apt-get source linux-image-4.4.0-31-generic
+$ cd linux-4.4.0
+
+# Customize the kernel, using the minimization of a KVM guest kernel as an example 
+$ make ARCH=x86_64 allnoconfig
+$ make ARCH=x86_64 kvmconfig
+# Add more modules to make it work 
+$ make nconfig
+
+# Build the kernel
+$ make bzImage modules -j8
+
+# Get the kernel version, which is 4.4.13 here 
+$ make kernelversion
+4.4.13
+
+$ cd ..
+$ sudo cp linux-4.4.0/arch/x86_64/boot/bzImage guest_rootfs/boot/vmlinuz-4.4.13
+$ sudo make -C linux-4.4.0 modules_install INSTALL_MOD_PATH=guest_rootfs/
+
+$ sudo chroot guest_rootfs
+$ rm vmlinuz
+$ ln -s boot/vmlinuz-4.4.13 vmlinuz
+$ exit
+
+$ sudo umount guest_rootfs
+$ rm -r guest_rootfs
+
+
+3. Generate a Ramdisk for the Custom Kernel
+===========================================
+# Check whether your PC supports KVM
+$ sudo apt-get install qemu qemu-kvm
+$ kvm-ok
+INFO: /dev/kvm exists
+KVM acceleration can be used
+
+# Boot up the VM
+# If your PC does not support KVM, remove the option -enable-kvm 
+# Specify the correct image format, using raw as an example
+$ qemu-system-x86_64 -enable-kvm -drive file=ubuntu.img,format=raw
+
+# INSIDE the VM, generate a ramdisk image for the custom kernel
+$ sudo update-initramfs -k 4.4.13 -c
+$ sudo ln -s /boot/initrd.img-4.4.13 /initrd.img 
+
+
+4. Update GRUB Configuration File
+=================================
+$ sudo update-grub 
+$ sudo reboot
+
+NOTE 
+The VM may not boot up properly using the newly generated grub.cfg. If this 
+happens, enter into grub and adjust the boot parameters properly. 
+
+When entering GRUB prompt, you can get your hard disks as recognized by GRUB 
+using the "ls" command.
+grub> ls
+(hd0, msdos1) ....
+
+Finally, a foolproof solution to fix the grub.cfg problem is removing the 
+grub.cfg file and creating a new one manually with the following lines:
+    set timeout=5
+    menuentry "myUbuntu" {
+	insmod gzio
+	insmod part_msdos
+	insmod ext3
+	linux (hd0,msdos1)/vmlinuz root=/dev/sda1
+	initrd (hd0,msdos1)/initrd
+    }
+

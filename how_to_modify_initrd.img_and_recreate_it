@@ -1,0 +1,42 @@
+                   How to Modify initrd.img and Recreate it
+Abstract
+========
+  This guide documents how to modify an Initial Ramdisk Image, and recreate it.
+
+Contents
+========
+  1. Extract initrd.img
+  2. Modify the Contents of initrd.img
+  3. Recreate the initrd.img
+
+=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+1. Extract initrd.img
+=====================
+
+# initrd.img is in gzip format, we first rename it to initrd.gz
+$ mv initrd.img initrd.gz
+
+# Unzip initrd.gz using gunzip, and we get the file "initrd"
+$ gunzip initrd.gz
+
+# The file "initrd" is in cpio "newc" format, which can be extracted using cpio
+$ mkdir initramfs && cd initramfs
+$ cpio -id < ../initrd
+
+# Now, the contents of initrd.img are in dir "initramfs"
+$ ls
+
+2. Modify the Contents of initrd.img
+====================================
+
+Based on your requirements, make some changes ...
+
+3. Recreate the initrd.img
+==========================
+
+$ cd ..
+$ find initramfs | cpio --create --format='newc' > initrd
+$ gzip initrd
+$ mv initrd.gz initrd.img
+

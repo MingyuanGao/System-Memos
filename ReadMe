@@ -1,0 +1,14 @@
+                                   sysMemos                                     
+Abstract
+========
+  This repository contains many system related guides, which are not well 
+documented elsewhere.  
+
+Index
+=====
+  1. How to Create a Minimal Ubuntu VM From Scratch
+  2. How to Add a Custom Linux Kernel to an Ubuntu VM
+  3. How to Modify initrd.img and Recreate it
+
+=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+

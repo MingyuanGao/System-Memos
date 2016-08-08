@@ -1,0 +1,140 @@
+           How to Create a Minimal Ubuntu Virtual Machine From Scratch           
+
+Abstract
+========
+  This guide documents how to create a mimimal Ubuntu virtual machine image from 
+scratch. Generally speaking, a Linux Kernel-based system contains three parts,
+i.e., Bootloader, Linux Kernel (including device drivers) and Initial Ramdisk, 
+Root Filesystem. In particular, we will 1) use GRUB2 as the bootloader, 2) use
+Linux Kernel and Initial Ramdisk image shipped with Ubuntu 16.04, and 3) use 
+Ubuntu Base as the Root Filesystem.  
+
+Contents
+========
+  1. Install GRUB2 into an Empty VM Image
+  2. Creating the Minimal Ubuntu Root File System 
+  3. Creating the Linux Kernel 
+  4. Creating the Minimal Ubuntu VM Image
+  5. Converting the VM Image to Different Formats 
+
+NOTE
+====
+  1. This guide has been tested on Ubuntu 16.04_x86-64.
+  2. Paths without a prefix have a default prefix of project top directory. 
+=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+1. Install GRUB2 into an Empty VM Image
+=======================================
+We will create an empty VM image in raw format. Inside the image, we will create
+a partition, which is formated as ext4 and has a label "xenial-rootfs".
+
+$ sudo apt-get install qemu grub2 kpartx 
+
+$ qemu-img create -f raw xenial.raw 10G
+
+# Creat a partition
+# Input: n default default default w
+$ sudo fdisk xenial.raw 
+
+$ sudo losetup /dev/loop0 xenial.raw
+$ sudo kpartx -a xenial.raw 
+$ sudo mkfs.ext4 /dev/mapper/loop0p1 -L xenial-rootfs
+
+$ mkdir rootfs
+$ sudo mount /dev/mapper/loop0p1 rootfs
+
+$ sudo grub-install --no-floppy --root-directory=$PWD/rootfs /dev/loop0
+
+# Add a grub config file with the following 
+#    set timeout=3 
+#    menuentry "myUbuntu" {
+#        insmod gzio
+#        insmod part_msdos
+#        insmod ext2 
+#        linux (hd0,msdos1)/vmlinuz root=LABEL=xenial-rootfs ro  
+#        initrd (hd0,msdos1)/initrd.img 
+#    }
+$ sudo vi rootfs/boot/grub/grub.cfg
+
+
+2. Creating the Minimal Ubuntu Root File System 
+===============================================
+$ sudo apt-get install debootstrap
+
+$ sudo debootstrap --arch=amd64 xenial ./xenial_rootfs
+
+# Append "restricted universe" to etc/apt/sources.list 
+$ sudo vi xenial_rootfs/etc/apt/sources.list
+
+# Set up network interface
+# Append to xenial_rootfs/etc/network/interfaces the following lines
+#     auto ens3
+#     iface ens3 inet dhcp 
+
+# Set hostname
+# add "myubuntu" to xenial_rootfs/etc/hostname
+# add "127.0.0.1 myubuntu" to xenial_rootfs/etc/hosts
+
+# Set fstab
+# Append to guest/etc/fstab the following 
+# LABEL=xenial-rootfs / ext4 defaults 0 0
+
+# Add a user in the sudo group 
+$ sudo chroot xenial_rootfs
+$ adduser me 
+$ usemod -aG sudo me
+
+# Install required packages
+$ apt-get install openssh-server  
+$ apt-get clean
+$ exit
+
+
+3. Creating the Linux Kernel and Initial Ramdisk 
+================================================
+Here, we will simply use the Linux kernel and Ramdisk shipped with Ubuntu 16.04. 
+Refer to the guide "How to Add a Custom Linux Kernel to an Ubuntu VM" on how to 
+replace the stock Linux kernel with a custom one.
+
+$ sudo mount -o bind /proc/ xenial_rootfs/proc
+$ sudo mount -o bind /sys/ xenial_rootfs/sys
+$ sudo mount -o bind /dev/ xenial_rootfs/dev
+
+# NOTE When prompted for installing GRUB, choose not to install 
+$ sudo chroot xenial_rootfs
+$ apt-get install linux-image-4.4.0-21-generic 
+$ exit
+
+$ sudo umount xenial_rootfs/proc xenial_rootfs/sys xenial_rootfs/dev
+
+
+4. Creating the Minimal Ubuntu VM Image
+=======================================
+$ sudo rsync -aP xenial_rootfs/* rootfs
+
+$ sudo umount rootfs
+$ rm -r rootfs
+$ sudo kpartx -d xenial.raw
+
+# Test the VM with QEMU/KVM
+$ sudo apt-get install qemu-kvm
+# Check whether your PC supports KVM
+$ kvm-ok
+# If your PC does not support KVM, remove option -enable-kvm 
+$ qemu-system-x86_64 -enable-kvm -drive file=xenial.raw,format=raw
+
+
+5. Converting the VM Image to Different Formats 
+===============================================
+# For KVM or XEN, converting the raw image into qcow2 format is recommended
+$ qemu-img convert -f raw -O qcow2 -c xenial.raw xenial.qcow2 
+
+# For VirtualBox, convert the raw image into vdi format
+$ qemu-img convert -f raw -O vdi xenial.raw xenial.vdi 
+
+# For VMware products, convert the raw image into vmdk format
+$ qemu-img convert -f raw -O vmdk xenial.raw xenial.vmdk
+
+# For Microsoft Hyper-V, convert the raw image into vhd format
+$ qemu-img convert -f raw -O vpc xenial.raw xenial.vhd
+

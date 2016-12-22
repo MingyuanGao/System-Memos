@@ -1,0 +1,88 @@
+      How to Compile QEMU for aarch64 with Target aarch64 and KVM Enabled  
+
+Abstract
+========
+  This guide documents how to compile QEMU for aarch64 with target aarch64 and 
+KVM enabled, which is done on an Ubuntu_x86-64 host. The normal way to do this 
+task is to cross compile it on an UNIX-like host system like Ubuntu. However, I 
+failed to compile it due to various compilation errors. Finally, I resort to 
+compiling it in an arm64 chroot environment and managed to do it.
+
+Contents
+========
+  1. Setting up the Host
+  2. Creating an arm64 chroot 
+  3. Setting up the arm64 chroot
+  4. Compiling QEMU in the chroot
+  Appendix: The Cross-Compiling Way 
+
+=-=-=-=-=-=-=-==-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+
+1. Setting up the Host
+======================
+# Install dependencies 
+$ sudo apt-get install qemu-user-static debootstrap
+
+
+2. Creating an arm64 chroot 
+===========================
+# Creating a base system from Ubuntu 16.04_arm64
+$ sudo qemu-debootstrap --arch=arm64 xenial xenial-arm64
+
+# Adding sources for arm64
+#   deb http://ports.ubuntu.com/ xenial main restricted universe multiverse
+#   deb-src http://ports.ubuntu.com/ xenial main restricted universe multiverse
+$ sudo vi xenial-arm64/etc/apt/source.list
+
+
+3. Setting up the arm64 chroot 
+==============================
+# chroot into xenial_arm64
+$ sudo chroot xenial-arm64
+
+# Install some useful packages 
+$ apt-get update
+$ apt-get install git vim 
+
+
+4. Compiling QEMU in the chroot
+===============================
+# Install build dependencies of qemu
+$ apt-get build-dep qemu
+
+# Download QEMU source code
+$ git clone git://git.qemu-project.org/qemu.git
+
+# Configure and build QEMU
+# N = 2 * # of CPU Cores on the host
+$ ./configure --target-list=aarch64-softmmu --enable-kvm 
+$ make -jN 
+
+$ exit
+
+  
+Appendix: The Cross-Compiling Way 
+=================================
+The normal way to compile QEMU for aarch64 with target aarch64 and KVM enabled is
+to cross compile it on an UNIX-like host. Below is the typical steps on an Ubuntu
+host.
+
+# Install the cross compiling toolchains
+$ sudo dpkg --add-architecture arm64
+$ sudo apt-get update
+$ sudo apt-get install crossbuild-essential-arm64
+
+# Install build dependencies of qemu
+$ sudo apt-get build-dep qemu
+
+# Download QEMU source code
+$ git clone git://git.qemu-project.org/qemu.git
+
+# Configure and build QEMU
+$ cd qemu
+$ ./configure --cpu=aarch64 --target-list=aarch64-softmmu --enable-kvm \
+     --cross-prefix=aarch64-linux-gnu- 
+# N = 2 * # of CPU Cores on the host
+$ make -jN 
+
